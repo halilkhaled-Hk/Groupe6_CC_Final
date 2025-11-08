@@ -11,28 +11,40 @@ on:
 jobs:
   review_and_notify:
     runs-on: ubuntu-latest
+
     steps:
+      # 1. Récupération du code
       - name: Checkout code
         uses: actions/checkout@v3
 
+      # 2. Installer jq pour transformer le diff en JSON
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      # 3. Générer le diff de la PR
       - name: Get PR diff
         id: diff
         run: |
           git fetch origin ${{ github.event.pull_request.base.ref }}
           git diff ${{ github.event.pull_request.base.sha }} ${{ github.sha }} > pr.diff
-          echo 'llm_diff<<EOF' >> $GITHUB_OUTPUT
-          cat pr.diff >> $GITHUB_OUTPUT
-          echo 'EOF' >> $GITHUB_OUTPUT
+          echo "llm_diff<<EOF" >> $GITHUB_OUTPUT
+          cat pr.diff | jq -Rs . >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
+      # 4. Appel de l'API LLM
       - name: Call Gemini LLM
         id: llm
         run: |
-          RESPONSE=$(curl -s -X POST "https://api.gemini.example.com/analyze" \
+          RESPONSE=$(curl -s -X POST "${{ secrets.GEMINI_API_URL }}" \
             -H "Authorization: Bearer ${{ secrets.GEMINI_API_KEY }}" \
             -H "Content-Type: application/json" \
-            -d "{\"prompt\": \"Tu es un relecteur de code expert. Analyse ce diff. Si le code est bon, fournis des pistes d'amélioration. Si le code contient des bugs, liste-les. Réponds en français.\", \"code_diff\": \"$(cat pr.diff | jq -Rs .)\"}")
+            -d "{
+                  \"prompt\": \"Tu es un relecteur de code expert. Analyse ce diff. Si le code est bon, fournis des pistes d'amélioration. Si le code contient des bugs, liste-les. Réponds en français.\",
+                  \"code_diff\": ${{ steps.diff.outputs.llm_diff }}
+                }")
           echo "llm_response=$RESPONSE" >> $GITHUB_OUTPUT
 
+      # 5. Commenter la PR sur GitHub
       - name: Comment on PR
         uses: actions/github-script@v7
         with:
@@ -45,6 +57,7 @@ jobs:
               body: `@${{ github.actor }} Voici la revue générée par l'IA :\n\n${{ steps.llm.outputs.llm_response }}`
             })
 
+      # 6. Envoyer un email à l'équipe
       - name: Send Email to Team
         uses: dawidd6/action-send-mail@v3
         with:
