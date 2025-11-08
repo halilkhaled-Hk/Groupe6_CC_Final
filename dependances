@@ -7,4 +7,3 @@ source venv/bin/activate  # (sous Windows: venv\Scripts\activate)
 
 pour ouvrir :
 uvicorn main:app --reload
-
