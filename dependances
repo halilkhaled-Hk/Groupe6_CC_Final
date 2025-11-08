@@ -1,0 +1,9 @@
+pip install pre-commit flake8 black
+pip freeze > requirements.txt
+
+deplus dahs lke projet tapez :
+python -m venv venv
+source venv/bin/activate  # (sous Windows: venv\Scripts\activate)
+
+pour ouvrir :
+uvicorn main:app --reload
