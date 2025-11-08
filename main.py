@@ -9,7 +9,7 @@ app.include_router(post_project.router)
 
 @app.get("/")
 def root():
-    return {"message": "Bienvenue sur ProjetAPI - FastAPI"}
+    return {"message": "Bienvenue sur ProjetAPI REST- FastAPI"}
 
 
 @app.get("/lint-test")
