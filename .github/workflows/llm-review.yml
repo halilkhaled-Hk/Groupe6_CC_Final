@@ -11,6 +11,7 @@ on:
 jobs:
   review_and_notify:
     runs-on: ubuntu-latest
+
     steps:
       # 1. Récupération du code
       - name: Checkout code
@@ -30,19 +31,27 @@ jobs:
           cat pr.diff | jq -Rs . >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      # 4. Appel de l'API LLM
+      # 4. Appel de l'API Gemini LLM
       - name: Call Gemini LLM
         id: llm
         run: |
-          CODE_DIFF="${{ steps.diff.outputs.llm_diff }}"
-          RESPONSE=$(curl -s -X POST "${{ secrets.GEMINI_API_URL }}" \
-            -H "Authorization: Bearer ${{ secrets.GEMINI_API_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d "$(jq -n \
-                  --arg prompt "Tu es un relecteur de code expert. Analyse ce diff. Si le code est bon, fournis des pistes d'amélioration. Si le code contient des bugs, liste-les. Réponds en français." \
-                  --arg diff "$CODE_DIFF" \
-                  '{prompt: $prompt, code_diff: $diff}')")
-          echo "llm_response=$RESPONSE" >> $GITHUB_OUTPUT
+          RESPONSE=$(jq -n \
+            --arg prompt "Tu es un relecteur de code expert. Analyse ce diff. Si le code est bon, fournis des pistes d'amélioration. Si le code contient des bugs, liste-les. Réponds en français." \
+            --arg diff "${{ steps.diff.outputs.llm_diff }}" \
+            '{prompt: $prompt, code_diff: $diff}' \
+            | curl -s -X POST "${{ secrets.GEMINI_API_URL }}" \
+              -H "Authorization: Bearer ${{ secrets.GEMINI_API_KEY }}" \
+              -H "Content-Type: application/json" \
+              -d @-)
+
+          # Gestion d'erreur si l'API échoue
+          if [ -z "$RESPONSE" ]; then
+            RESPONSE="Erreur : L'API Gemini n'a pas renvoyé de réponse. Vérifie la clé API ou l'URL."
+          fi
+
+          echo "llm_response<<EOF" >> $GITHUB_OUTPUT
+          echo "$RESPONSE" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       # 5. Commenter la PR sur GitHub
       - name: Comment on PR
@@ -50,12 +59,16 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
+            const response = ${{ steps.llm.outputs.llm_response }};
+            const formatted = response && response.trim() !== ""
+              ? ### 🤖 Revue automatique par l'IA\n\n${response}
+              : ⚠ Une erreur est survenue lors de l'analyse par l'IA.;
             github.rest.issues.createComment({
               issue_number: ${{ github.event.pull_request.number }},
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `@${{ github.actor }} Voici la revue générée par l'IA :\n\n${{ steps.llm.outputs.llm_response }}`
-            })
+              body: @${{ github.actor }}\n\n${formatted}
+            });
 
       # 6. Envoyer un email à l'équipe
       - name: Send Email to Team
@@ -66,6 +79,9 @@ jobs:
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
           subject: "Revue LLM pour PR #${{ github.event.pull_request.number }} par @${{ github.actor }}"
-          body: "Voici la revue générée par l'IA : \n\n${{ steps.llm.outputs.llm_response }}"
+          body: |
+            Voici la revue générée par l'IA :
+
+            ${{ steps.llm.outputs.llm_response }}
           to: ${{ secrets.TEAM_EMAIL_LIST }}
           secure: true
