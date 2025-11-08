@@ -4,7 +4,10 @@ import json
 import os
 
 
-router = APIRouter(prefix="/projects", tags=["Projects"])
+router = APIRouter(
+    prefix="/projects",
+    tags=["Projects"]
+)
 
 
 DB_PATH = "db.json"
