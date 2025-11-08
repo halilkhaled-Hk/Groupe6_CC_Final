@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from routes import post_project
 
-app = FastAPI(title="ProjetAPI - TP GitHub DevOpss")
+app = FastAPI(title="ProjetAPI - TP GitHub DevOps")
 
 # Inclusion des routes
 app.include_router(post_project.router)
