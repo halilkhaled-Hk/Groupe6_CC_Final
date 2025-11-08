@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from routes import post_project
-from routes import Get_Project
+from routes import get_projects
 app = FastAPI(title="ProjetAPI - TP GitHub DevOps")
 
 # Inclusion des routes
