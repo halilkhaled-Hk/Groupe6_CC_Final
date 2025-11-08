@@ -10,3 +10,8 @@ app.include_router(get_project_by_id.router)
 @app.get("/")
 def root():
     return {"message": "Bienvenue sur ProjetAPI - FastAPI"}
+
+
+@app.get("/lint-test")
+def lint_test()
+   return {"message": "Erreur d'indentation volontaire pour test de CI et LLM"}  # 👈 indentation volontairement incorrecte (3 espaces)
