@@ -28,22 +28,25 @@ jobs:
           DIFF=$(cat pr.diff | jq -Rs .)
           echo "llm_diff=$DIFF" >> $GITHUB_OUTPUT
 
-      # 4️⃣ Appeler l’API Gemini pour analyse du diff
+            # 4️⃣ Appeler l’API Gemini pour analyse du diff
       - name: Call Gemini LLM
         id: llm
         run: |
+          PROMPT="Tu es un relecteur de code expert. Analyse ce diff. Si le code est bon, fournis des pistes d'amélioration. Si le code contient des bugs, liste-les. Réponds en français."
+          DIFF="${{ steps.diff.outputs.llm_diff }}"
+
           PAYLOAD=$(jq -n \
-            --arg prompt "Tu es un relecteur de code expert. Analyse ce diff. Si le code est bon, fournis des pistes d'amélioration. Si le code contient des bugs, liste-les. Réponds en français." \
-            --arg diff "${{ steps.diff.outputs.llm_diff }}" \
-            '{contents: [{parts: [{text: ($prompt + "\n\nDiff:\n" + $diff)}]}]}')
+            --arg prompt "$PROMPT" \
+            --arg diff "$DIFF" \
+            '{contents: [{parts: [{text: ($prompt "\n\nDiff:\n" $diff)}]}]}')
 
           echo "Payload envoyé à Gemini :"
           echo "$PAYLOAD"
 
-          RESPONSE=$(echo "$PAYLOAD" | curl -s -X POST \
+          RESPONSE=$(curl -s -X POST \
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${{ secrets.GEMINI_API_KEY }}" \
             -H "Content-Type: application/json" \
-            -d @-)
+            -d "$PAYLOAD")
 
           if [ -z "$RESPONSE" ]; then
             RESPONSE="⚠️ Erreur : L'API Gemini n'a pas renvoyé de réponse. Vérifie la clé API ou l'URL."
@@ -52,6 +55,7 @@ jobs:
           echo "llm_response<<EOF" >> $GITHUB_OUTPUT
           echo "$RESPONSE" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+
 
       # 5️⃣ Poster le commentaire sur la Pull Request
       - name: Comment on PR
