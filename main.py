@@ -14,4 +14,6 @@ def root():
 
 @app.get("/lint-test")
 def lint_test():
-   return {"message": "Erreur d'indentation volontaire pour test de CI et LLM"}  # 👈 indentation volontairement incorrecte (3 espaces)
+    return {
+        "message": "Erreurs d'indentation volontaire pour test de CI et LLM"
+    }  # 👈 indentation volontairement incorrecte (3 espaces)
