@@ -33,4 +33,4 @@ def add_project(project: Project):
     project.id = len(db) + 1
     db.append(project.dict())
     write_db(db)
-    return {"message": "Projet reussi ajouté avec succès", "project": project}
+    return {"message": "Projet ajouté avec succès", "project": project}
