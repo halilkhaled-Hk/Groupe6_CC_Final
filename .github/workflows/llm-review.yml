@@ -2,8 +2,11 @@ name: LLM Review & Notify
 
 on:
   pull_request:
-    types: [opened, synchronize]
-    branches: [ develop ]
+    types:
+      - opened
+      - synchronize
+    branches:
+      - develop
 
 jobs:
   review_and_notify:
@@ -12,15 +15,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-     - name: Get PR diff
-  id: diff
-  run: |
-    git fetch origin ${{ github.event.pull_request.base.ref }}
-    git diff ${{ github.event.pull_request.base.sha }} ${{ github.sha }} > pr.diff
-    echo "llm_diff<<EOF" >> $GITHUB_OUTPUT
-    cat pr.diff >> $GITHUB_OUTPUT
-    echo "EOF" >> $GITHUB_OUTPUT
-
+      - name: Get PR diff
+        id: diff
+        run: |
+          git fetch origin ${{ github.event.pull_request.base.ref }}
+          git diff ${{ github.event.pull_request.base.sha }} ${{ github.sha }} > pr.diff
+          echo "llm_diff<<EOF" >> $GITHUB_OUTPUT
+          cat pr.diff >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Call Gemini LLM
         id: llm
@@ -28,7 +30,7 @@ jobs:
           RESPONSE=$(curl -s -X POST "https://api.gemini.example.com/analyze" \
             -H "Authorization: Bearer ${{ secrets.GEMINI_API_KEY }}" \
             -H "Content-Type: application/json" \
-            -d "{\"prompt\": \"Tu es un relecteur de code expert. Analyse ce diff. Si le code est bon, fournis des pistes d'amélioration. Si le code contient des bugs, liste-les. Réponds en français.\", \"code_diff\": \"${{ steps.diff.outputs.diff }}\"}")
+            -d "{\"prompt\": \"Tu es un relecteur de code expert. Analyse ce diff. Si le code est bon, fournis des pistes d'amélioration. Si le code contient des bugs, liste-les. Réponds en français.\", \"code_diff\": \"${{ steps.diff.outputs.llm_diff }}\"}")
           echo "llm_response=$RESPONSE" >> $GITHUB_OUTPUT
 
       - name: Comment on PR
