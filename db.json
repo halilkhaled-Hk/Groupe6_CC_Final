@@ -1,1 +1,16 @@
-[]
+[
+  {
+    "id": 1,
+    "studentName": "Noa Jude",
+    "course": "DevOps",
+    "githubUrl": "https://github.com/noajude/devops-api",
+    "grade": 18
+  },
+  {
+    "id": 2,
+    "studentName": "Sarah Mbala",
+    "course": "Python",
+    "githubUrl": "https://github.com/sarahmbala/python-api",
+    "grade": 16
+  }
+]

@@ -5,7 +5,7 @@ app = FastAPI(title="ProjetAPI - TP GitHub DevOpss")
 
 # Inclusion des routes
 app.include_router(post_project.router)
-
+app.include_router(get_projects.router)
 
 @app.get("/")
 def root():
