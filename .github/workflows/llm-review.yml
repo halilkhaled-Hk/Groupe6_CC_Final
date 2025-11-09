@@ -36,26 +36,28 @@ jobs:
           PROMPT="Tu es un relecteur de code expert. Analyse ce diff. Si le code est bon, propose des pistes d'amélioration. Si le code contient des bugs, liste-les clairement. Réponds en français."
           DIFF="${{ steps.diff.outputs.llm_diff }}"
 
-          # Création du payload JSON avec heredoc
-          cat <<EOF > payload.json
+          cat > payload.json <<'JSON'
 {
   "contents": [
     {
       "parts": [
         {
-          "text": "${PROMPT}\n\nDiff:\n${DIFF}"
+          "text": "PLACEHOLDER"
         }
       ]
     }
   ]
 }
-EOF
+JSON
+
+          # Remplacement du placeholder en sécurité (évite les erreurs de guillemets)
+          sed -i "s|PLACEHOLDER|${PROMPT}\n\nDiff:\n${DIFF}|g" payload.json
 
           echo "📦 Payload envoyé à Gemini :"
           cat payload.json
 
           RESPONSE=$(curl -s -X POST \
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${{ secrets.GEMINI_API_KEY }}" \ 
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${{ secrets.GEMINI_API_KEY }}" \
             -H "Content-Type: application/json" \
             -d @payload.json)
 
@@ -63,9 +65,11 @@ EOF
             RESPONSE="⚠️ Erreur : L'API Gemini n'a pas renvoyé de réponse. Vérifie la clé API ou l'URL."
           fi
 
-          echo "llm_response<<EOF" >> $GITHUB_OUTPUT
-          echo "$RESPONSE" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          {
+            echo "llm_response<<EOF"
+            echo "$RESPONSE"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       # 5️⃣ Commenter automatiquement la PR
       - name: Comment on PR
