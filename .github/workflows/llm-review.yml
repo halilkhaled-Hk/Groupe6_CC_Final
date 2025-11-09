@@ -4,6 +4,13 @@ on:
     types: [opened, synchronize]
     branches:
       - develop
+
+# Permissions nécessaires pour commenter sur les PRs
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
 jobs:
   review_and_notify:
     runs-on: ubuntu-latest
@@ -61,7 +68,7 @@ jobs:
           
           # Appel API
           RESPONSE=$(curl -s -X POST \
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-exp:generateContent?key=${{ secrets.GEMINI_API_KEY }}" \
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${{ secrets.GEMINI_API_KEY }}" \
             -H "Content-Type: application/json" \
             -d @payload.json)
           
@@ -101,7 +108,12 @@ jobs:
                 text = "Réponse de l'API:\n```json\n" + JSON.stringify(json, null, 2) + "\n```";
               }
             } catch (e) {
-              text = `⚠️ Erreur de parsing JSON: ${e.message}\n\nRéponse brute:\n\`\`\`\n${raw}\n\`\`\``;
+              text = `⚠️ Erreur de parsing JSON: ${e.message}\n\nRéponse brute:\n\`\`\`\n${raw.substring(0, 500)}\n\`\`\``;
+            }
+            
+            // Limiter la taille du commentaire
+            if (text.length > 65000) {
+              text = text.substring(0, 65000) + "\n\n... (tronqué)";
             }
             
             await github.rest.issues.createComment({
