@@ -10,7 +10,7 @@ def get_all_projects():
     try:
         with open(DB_PATH, "r") as f:
             data = json.load(f)
-        return data
+         data
     except FileNotFoundError:
         raise HTTPException(status_code=500, detail="Fichier db.json introuvable")
     except Exception as e:
