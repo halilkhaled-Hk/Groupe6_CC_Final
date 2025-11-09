@@ -3,4 +3,3 @@ mypy
 black
 fastapi
 pydantic
-

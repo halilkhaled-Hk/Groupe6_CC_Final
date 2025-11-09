@@ -1,103 +1,137 @@
 name: LLM Review & Notify
-
 on:
   pull_request:
     types: [opened, synchronize]
     branches:
       - develop
 
+# Permissions nécessaires pour commenter sur les PRs
 permissions:
-  contents: read         # nécessaire pour git diff
-  pull-requests: write   # pour commenter la PR
-  issues: write          # pour commenter (si nécessaire)
-  actions: read
+  contents: read
+  pull-requests: write
+  issues: write
 
 jobs:
   review_and_notify:
     runs-on: ubuntu-latest
-
     steps:
-      # 1️⃣ Checkout du code
+      # 1️⃣ Récupération du code
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # nécessaire pour git diff complet
-
+          fetch-depth: 0
+      
       # 2️⃣ Installer jq pour manipuler JSON
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
-
-      # 3️⃣ Générer le diff de la PR
+      
+      # 3️⃣ Générer le diff de la PR (exclure les fichiers binaires)
       - name: Get PR diff
         id: diff
         run: |
           git fetch origin ${{ github.event.pull_request.base.ref }}
-          git diff ${{ github.event.pull_request.base.sha }} ${{ github.sha }} > pr.diff
-          DIFF=$(jq -Rs . pr.diff)
-          echo "llm_diff=$DIFF" >> $GITHUB_OUTPUT
-
-      # 4️⃣ Appeler l’API Gemini 2.5 Flash
+          git diff ${{ github.event.pull_request.base.sha }} ${{ github.sha }} -- . ":(exclude)*.pyc" > pr.diff
+          # Limiter la taille du diff si nécessaire
+          if [ $(wc -c < pr.diff) -gt 50000 ]; then
+            head -c 50000 pr.diff > pr_truncated.diff
+            echo "⚠️ Diff tronqué (trop volumineux)" >> pr_truncated.diff
+            mv pr_truncated.diff pr.diff
+          fi
+      
+      # 4️⃣ Appeler Gemini 2.5-flash pour analyse
       - name: Call Gemini LLM
         id: gemini
+        shell: bash
         run: |
           PROMPT="Tu es un relecteur de code expert. Analyse ce diff. Si le code est bon, propose des pistes d'amélioration. Si le code contient des bugs, liste-les clairement. Réponds en français."
-          DIFF=${{ steps.diff.outputs.llm_diff }}
-
-          # Construction du payload JSON avec heredoc
-          cat <<EOF > payload.json
-{
-  "contents": [
-    {
-      "parts": [
-        {
-          "text": "${PROMPT}\n\nDiff:\n${DIFF}"
-        }
-      ]
-    }
-  ]
-}
-EOF
-
-          echo "📦 Payload envoyé à Gemini :"
-          cat payload.json
-
+          
+          # Lire le diff et l'échapper correctement pour JSON
+          DIFF_CONTENT=$(cat pr.diff)
+          
+          # Créer le payload JSON avec jq pour éviter les problèmes d'échappement
+          jq -n \
+            --arg prompt "$PROMPT" \
+            --arg diff "$DIFF_CONTENT" \
+            '{
+              contents: [
+                {
+                  parts: [
+                    {
+                      text: ($prompt + "\n\nDiff:\n" + $diff)
+                    }
+                  ]
+                }
+              ]
+            }' > payload.json
+          
+          echo "📦 Payload créé (taille: $(wc -c < payload.json) octets)"
+          
+          # Appel API
           RESPONSE=$(curl -s -X POST \
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${{ secrets.GEMINI_API_KEY }}" \
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${{ secrets.GEMINI_API_KEY }}" \
             -H "Content-Type: application/json" \
             -d @payload.json)
-
+          
           if [ -z "$RESPONSE" ]; then
-            RESPONSE="⚠️ Erreur : L'API Gemini n'a pas renvoyé de réponse. Vérifie la clé API ou l'URL."
+            RESPONSE='{"error": "L'\''API Gemini n'\''a pas renvoyé de réponse. Vérifie la clé API ou l'\''URL."}'
           fi
-
-          echo "llm_response<<EOF" >> $GITHUB_OUTPUT
-          echo "$RESPONSE" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      # 5️⃣ Commenter la PR (compatible forks)
+          
+          # Sauvegarder la réponse dans un fichier pour éviter les problèmes de multiline
+          echo "$RESPONSE" > response.json
+          
+          # Utiliser un délimiteur EOF pour les sorties multilignes
+          {
+            echo "llm_response<<EOF"
+            cat response.json
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+      
+      # 5️⃣ Sauvegarder la réponse dans une variable d'environnement
+      - name: Save LLM Response
+        run: |
+          cat response.json > llm_response.txt
+          echo "Response saved to file"
+      
+      # 6️⃣ Commenter automatiquement la PR
       - name: Comment on PR
-        if: github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/github-script@v7
+        env:
+          LLM_RESPONSE: ${{ steps.gemini.outputs.llm_response }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const raw = `${{ steps.gemini.outputs.llm_response }}`;
-            let text = raw;
+            const raw = process.env.LLM_RESPONSE;
+            let text = "⚠️ Erreur lors de la génération de la revue IA.";
+            
             try {
               const json = JSON.parse(raw);
-              if (json.candidates && json.candidates[0].content && json.candidates[0].content.parts) {
+              
+              if (json.error) {
+                text = `⚠️ ${json.error}`;
+              } else if (json.candidates && json.candidates[0]?.content?.parts) {
                 text = json.candidates[0].content.parts.map(p => p.text).join("\n");
+              } else if (json.candidates && json.candidates[0]?.text) {
+                text = json.candidates[0].text;
+              } else {
+                text = "Réponse de l'API:\n```json\n" + JSON.stringify(json, null, 2) + "\n```";
               }
-            } catch {}
+            } catch (e) {
+              text = `⚠️ Erreur de parsing JSON: ${e.message}\n\nRéponse brute:\n\`\`\`\n${raw.substring(0, 500)}\n\`\`\``;
+            }
+            
+            // Limiter la taille du commentaire
+            if (text.length > 65000) {
+              text = text.substring(0, 65000) + "\n\n... (tronqué)";
+            }
             
             await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `### 🤖 Revue automatique par Gemini 2.5 Flash\n\n${text}`
-            })
-
-      # 6️⃣ Envoi d’un mail à l’équipe
+              body: `### 🤖 Revue automatique par Gemini AI\n\n${text}`
+            });
+      
+      # 7️⃣ Envoi d'un email à l'équipe
       - name: Send Email to Team
         uses: dawidd6/action-send-mail@v3
         with:
@@ -107,8 +141,17 @@ EOF
           password: ${{ secrets.MAIL_PASSWORD }}
           subject: "🔍 Revue LLM pour PR #${{ github.event.pull_request.number }} par @${{ github.actor }}"
           body: |
-            Voici la revue générée automatiquement par Gemini 2.5 Flash :
-
-            ${{ steps.gemini.outputs.llm_response }}
+            Bonjour,
+            
+            Une nouvelle Pull Request a été soumise et analysée par Gemini AI.
+            
+            PR: ${{ github.event.pull_request.html_url }}
+            Auteur: @${{ github.actor }}
+            
+            Consultez les commentaires sur la PR pour voir la revue complète.
+            
+            ---
+            Ceci est un email automatique.
           to: ${{ secrets.TEAM_EMAIL_LIST }}
+          from: GitHub Actions
           secure: true

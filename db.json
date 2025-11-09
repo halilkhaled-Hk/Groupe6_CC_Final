@@ -12,5 +12,13 @@
     "course": "Python",
     "githubUrl": "https://github.com/sarahmbala/python-api",
     "grade": 16
+  },
+
+{
+    "id": 3,
+    "studentName": "sonia Mbala",
+    "course": "Java",
+    "githubUrl": "https://github.com/soniambala/java-api",
+    "grade": 16
   }
 ]
