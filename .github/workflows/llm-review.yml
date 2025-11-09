@@ -28,7 +28,7 @@ jobs:
           DIFF=$(cat pr.diff | jq -Rs .)
           echo "llm_diff=$DIFF" >> $GITHUB_OUTPUT
 
-      # 4️⃣ Appeler Gemini 2.5‑flash pour analyse
+      # 4️⃣ Appeler Gemini 2.5-flash pour analyse
       - name: Call Gemini LLM
         id: gemini
         shell: bash
@@ -55,7 +55,7 @@ EOF
           cat payload.json
 
           RESPONSE=$(curl -s -X POST \
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${{ secrets.GEMINI_API_KEY }}" \
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${{ secrets.GEMINI_API_KEY }}" \ 
             -H "Content-Type: application/json" \
             -d @payload.json)
 
