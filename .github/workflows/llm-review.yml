@@ -19,16 +19,16 @@ jobs:
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
-      # 3️⃣ Générer le diff de la PR
+      # 3️⃣ Générer le diff de la PR (exclure les fichiers binaires)
       - name: Get PR diff
         id: diff
         run: |
           git fetch origin ${{ github.event.pull_request.base.ref }}
-          git diff ${{ github.event.pull_request.base.sha }} ${{ github.sha }} > pr.diff
+          git diff ${{ github.event.pull_request.base.sha }} ${{ github.sha }} -- . ":(exclude)*.pyc" > pr.diff
           DIFF=$(cat pr.diff | jq -Rs .)
           echo "llm_diff=$DIFF" >> $GITHUB_OUTPUT
 
-      # 4️⃣ Appeler Gemini LLM
+      # 4️⃣ Appeler Gemini 2.5‑flash pour analyse
       - name: Call Gemini LLM
         id: gemini
         shell: bash
@@ -36,7 +36,7 @@ jobs:
           PROMPT="Tu es un relecteur de code expert. Analyse ce diff. Si le code est bon, propose des pistes d'amélioration. Si le code contient des bugs, liste-les clairement. Réponds en français."
           DIFF="${{ steps.diff.outputs.llm_diff }}"
 
-          # Création du payload JSON
+          # Création du payload JSON avec heredoc
           cat <<EOF > payload.json
 {
   "contents": [
@@ -85,6 +85,7 @@ EOF
             } catch {
               text = raw;
             }
+
             await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
@@ -92,7 +93,7 @@ EOF
               body: `### 🤖 Revue automatique par Gemini AI\n\n${text}`
             });
 
-      # 6️⃣ Envoyer un email à l’équipe
+      # 6️⃣ Envoi d’un email à l’équipe
       - name: Send Email to Team
         uses: dawidd6/action-send-mail@v3
         with:
